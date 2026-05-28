@@ -127,8 +127,20 @@ fun AddProjectScreen(navController: NavController, viewModel: ProjectViewModel) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewModel, id: String?) {
-    val project = id?.let { viewModel.getProjectById(it) } ?: return
-    var progress by remember { mutableFloatStateOf(project.progress) }
+    // 1. Збираємо загальний список проектів (він уже є StateFlow і не перестворюється)
+    val projects by viewModel.projects.collectAsState()
+
+    // 2. Знаходимо потрібний проект прямо зі списку в пам'яті інтерфейсу.
+    // Це миттєво і не смикає базу даних при кожному русі пальця!
+    val project = projects.find { it.id == id }
+
+    if (project == null) {
+        // Якщо проект видалили, просто виходимо
+        return
+    }
+
+    // 3. Локальний стан для слайдера, який відповідає ТІЛЬКИ за візуальний рух
+    var sliderPosition by remember (project.id) { mutableFloatStateOf(project.progress) }
 
     Scaffold(
         topBar = {
@@ -150,16 +162,33 @@ fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewMod
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Прогрес", color = Color.Gray)
-                    Text("${(progress * 100).roundToInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Slider(value = progress, onValueChange = { progress = it; viewModel.updateProgress(project.id, it) })
+                    Text("${(sliderPosition * 100).roundToInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+                    // 4. Слайдер змінює ЛОКАЛЬНИЙ стан миттєво (рука рухається плавно)
+                    // і ОДНОЧАСНО відправляє запис в базу даних фоном
+                    Slider(
+                        value = sliderPosition,
+                        onValueChange = { newProgress ->
+                            sliderPosition = newProgress
+                            viewModel.updateProgress(project, newProgress)
+                        }
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Button(onClick = { /* Логіка редагування назви за бажанням */ }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black), border = ButtonDefaults.outlinedButtonBorder) {
+            Button(onClick = { /* Логіка редагування */ }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black), border = ButtonDefaults.outlinedButtonBorder) {
                 Text("Редагувати")
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = { viewModel.deleteProject(project.id); navController.popBackStack() }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black), border = ButtonDefaults.outlinedButtonBorder) {
+            Button(
+                onClick = {
+                    viewModel.deleteProject(project)
+                    navController.popBackStack()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                border = ButtonDefaults.outlinedButtonBorder
+            ) {
                 Text("Видалити")
             }
         }
