@@ -127,20 +127,21 @@ fun AddProjectScreen(navController: NavController, viewModel: ProjectViewModel) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewModel, id: String?) {
-    // 1. Збираємо загальний список проектів (він уже є StateFlow і не перестворюється)
     val projects by viewModel.projects.collectAsState()
-
-    // 2. Знаходимо потрібний проект прямо зі списку в пам'яті інтерфейсу.
-    // Це миттєво і не смикає базу даних при кожному русі пальця!
     val project = projects.find { it.id == id }
 
     if (project == null) {
-        // Якщо проект видалили, просто виходимо
         return
     }
 
-    // 3. Локальний стан для слайдера, який відповідає ТІЛЬКИ за візуальний рух
-    var sliderPosition by remember (project.id) { mutableFloatStateOf(project.progress) }
+    var sliderPosition by remember(project.id) { mutableFloatStateOf(project.progress) }
+
+    // Стан для відображення діалогового вікна редагування
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    // Локальні змінні для збереження тексту редагування
+    var editName by remember(project.id) { mutableStateOf(project.name) }
+    var editDescription by remember(project.id) { mutableStateOf(project.description) }
 
     Scaffold(
         topBar = {
@@ -163,9 +164,6 @@ fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewMod
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Прогрес", color = Color.Gray)
                     Text("${(sliderPosition * 100).roundToInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-
-                    // 4. Слайдер змінює ЛОКАЛЬНИЙ стан миттєво (рука рухається плавно)
-                    // і ОДНОЧАСНО відправляє запис в базу даних фоном
                     Slider(
                         value = sliderPosition,
                         onValueChange = { newProgress ->
@@ -176,7 +174,14 @@ fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewMod
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Button(onClick = { /* Логіка редагування */ }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black), border = ButtonDefaults.outlinedButtonBorder) {
+
+            // Кнопка відкриває діалогове вікно редагування
+            Button(
+                onClick = { showEditDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                border = ButtonDefaults.outlinedButtonBorder
+            ) {
                 Text("Редагувати")
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -192,5 +197,49 @@ fun DetailsProjectScreen(navController: NavController, viewModel: ProjectViewMod
                 Text("Видалити")
             }
         }
+    }
+
+    // Компонент AlertDialog для зміни назви та опису
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Редагувати проект", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Назва проекту") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editDescription,
+                        onValueChange = { editDescription = it },
+                        label = { Text("Опис") },
+                        modifier = Modifier.fillMaxWidth().height(100.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editName.isNotBlank()) {
+                            viewModel.updateProjectDetails(project, editName, editDescription)
+                            showEditDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BlueAccent, contentColor = Color.White)
+                ) {
+                    Text("Зберегти")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showEditDialog = false }) {
+                    Text("Скасувати", color = Color.Black)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(12.dp)
+        )
     }
 }

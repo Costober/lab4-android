@@ -52,4 +52,10 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
             repository.update(project.copy(progress = newProgress))
         }
     }
+
+    fun updateProjectDetails(project: Project, newName: String, newDescription: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.update(project.copy(name = newName, description = newDescription))
+        }
+    }
 }
